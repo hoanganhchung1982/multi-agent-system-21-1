@@ -14,10 +14,8 @@ export interface VercelResponse {
   end?: () => void;
 }
 
-// SỬA LẠI TÊN MODEL CHUẨN CỦA GOOGLE GEMINI
 const TEXT_MODEL = 'gemini-2.5-flash';
 
-// Lấy danh sách API Key từ biến môi trường trên Vercel hoặc fallback
 const getAPIKeys = (): string[] => {
   const keys: string[] = [];
   
@@ -34,7 +32,6 @@ const getAPIKeys = (): string[] => {
   return Array.from(new Set(keys.filter(k => k && k.length > 0)));
 };
 
-// Hàm thực thi với cơ chế tự động xoay vòng Key
 async function executeWithKeyRotation(operation: (ai: GoogleGenAI) => Promise<any>): Promise<any> {
   const keys = getAPIKeys();
   if (keys.length === 0) {
@@ -49,15 +46,8 @@ async function executeWithKeyRotation(operation: (ai: GoogleGenAI) => Promise<an
       const ai = new GoogleGenAI({ apiKey });
       return await operation(ai);
     } catch (error: any) {
-      console.warn(`Key (${apiKey.substring(0, 6)}...) gặp lỗi, đang thử Key khác...`, error?.message);
+      console.warn(`Key gặp lỗi, đang thử Key khác...`, error?.message);
       lastError = error;
-      
-      const errStr = JSON.stringify(error || {});
-      const isRateLimit = error?.status === 429 || errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED');
-      if (!isRateLimit && !errStr.includes('API_KEY')) {
-        // Nếu không phải lỗi quota hay lỗi key thì ném lỗi luôn để debug nhanh
-        // throw error; 
-      }
     }
   }
 
@@ -72,7 +62,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { action, subject, agent, input, image, text, systemPrompt } = req.body || {};
 
   try {
-    // 1. Xử lý SUMMARY
     if (action === 'SUMMARY') {
       const summaryText = await executeWithKeyRotation(async (ai) => {
         const response = await ai.models.generateContent({
@@ -84,7 +73,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ text: summaryText });
     }
 
-    // 2. Chuẩn hóa chuỗi Prompt
     const safeSubject = subject || '';
     const safeAgent = agent || '';
     const safeSystemPrompt = systemPrompt || '';
@@ -104,43 +92,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // 3. Gọi xử lý theo từng loại Tác tử
     const resultText = await executeWithKeyRotation(async (ai) => {
-      if (agent === 'GIAI_NHANH_1S') {
-        const response = await ai.models.generateContent({
-          model: TEXT_MODEL,
-          contents: parts,
-          config: { 
-            temperature: 0.1, 
-            topP: 0.5,
-            responseMimeType: "application/json",
-          }
-        });
-        return response.text || '{}';
-      } else if (agent === 'LUYEN_SKILL') {
-        const response = await ai.models.generateContent({
-          model: TEXT_MODEL,
-          contents: parts,
-          config: {
-            temperature: 0.1,
-            topP: 0.5,
-            responseMimeType: "application/json",
-          }
-        });
-        return response.text || '{}';
-      } else {
-        const response = await ai.models.generateContent({
-          model: TEXT_MODEL,
-          contents: parts,
-          config: { temperature: 0.1, topP: 0.5 }
-        });
-        return response.text || '';
-      }
+      const response = await ai.models.generateContent({
+        model: TEXT_MODEL,
+        contents: parts,
+        config: { temperature: 0.1, topP: 0.5 }
+      });
+      return response.text || '';
     });
 
     return res.status(200).json({ text: resultText });
-
-</table>
 
   } catch (error: any) {
     console.error("Lỗi API Server Gemini:", error);
