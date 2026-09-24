@@ -92,11 +92,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const resultText = await executeWithKeyRotation(async (ai) => {
+const resultText = await executeWithKeyRotation(async (ai) => {
+      // Cấu hình linh hoạt theo từng tác tử để tránh lỗi phản hồi
+      let generationConfig: any = { temperature: 0.1, topP: 0.5 };
+
+      if (agent === 'GIAI_NHANH_1S') {
+        // Tác tử 1S ưu tiên trả về text rõ ràng, rành mạch cho học sinh
+        generationConfig.maxOutputTokens = 2048;
+      }
+
       const response = await ai.models.generateContent({
         model: TEXT_MODEL,
         contents: parts,
-        config: { temperature: 0.1, topP: 0.5 }
+        config: generationConfig
       });
       return response.text || '';
     });
