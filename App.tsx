@@ -10,13 +10,43 @@ import { compressImage } from './services/imageProcessor';
 // Thay thế URL Web App Google Apps Script của bạn vào đây khi triển khai
 const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxiyXqRez46ieiWJcaJiy_siEThYgiDCf7fNgST3Zky8KOdNSyGy5G4Tzt2rsCHqL8Ajw/exec";
 
+// Hàm xử lý và bóc tách JSON an toàn từ phản hồi của AI
+const parseJsonSafely = <T,>(jsonString: string): T | null => {
+  try {
+    let cleaned = jsonString.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    }
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+    return JSON.parse(cleaned) as T;
+  } catch (e) {
+    console.error('Lỗi parse JSON:', e, 'Dữ liệu gốc:', jsonString);
+    return null;
+  }
+};
+
+// Chuẩn hóa chữ cái đáp án (A, B, C, D)
+const normalizeAnswerLetter = (ans: string): string => {
+  if (!ans) return '';
+  const trimmed = ans.trim().toUpperCase();
+  return trimmed.charAt(0);
+};
+
 const AgentLogo = React.memo(({ type, active }: { type: AgentType, active: boolean }) => {
   const cls = `w-3.5 h-3.5 ${active ? 'text-blue-600' : 'text-white'} transition-colors duration-300`;
   switch (type) {
-    case AgentType.GIAI_NHANH_1S: return <svg className={cls} viewBox="0 0 24 24" fill="currentColor"><path d="M13 10V3L4 14H11V21L20 10H13Z" /></svg>;
-    case AgentType.GIA_SU_AI: return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
-    case AgentType.LUYEN_SKILL: return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-    default: return null;
+    case AgentType.GIAI_NHANH_1S: 
+      return <svg className={cls} viewBox="0 0 24 24" fill="currentColor"><path d="M13 10V3L4 14H11V21L20 10H13Z" /></svg>;
+    case AgentType.GIA_SU_AI: 
+      return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+    case AgentType.LUYEN_SKILL: 
+      return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+    default: 
+      return null;
   }
 });
 
@@ -172,14 +202,16 @@ const App: React.FC = () => {
     setIsImageCaptured(false);
     setIsCurrentResultSaved(false);
 
-    setShowCamera(true); setIsCounting(true); setCountdown(3);
+    setShowCamera(true); 
+    setIsCounting(true); 
+    setCountdown(3);
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       if (videoRef.current) videoRef.current.srcObject = s;
     } catch { 
       setShowCamera(false); 
       setIsCounting(false);
-      alert("Không thể truy cập camera. Vui lòng kiểm tra quyền.");
+      alert("Không thể truy cập camera. Vui lòng kiểm tra quyền truy cập.");
     }
   }, []);
 
@@ -217,16 +249,19 @@ const App: React.FC = () => {
     } else {
       const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SR) return alert("Trình duyệt không hỗ trợ nhận diện giọng nói!");
-      const r = new SR(); r.lang = 'vi-VN';
+      const r = new SR(); 
+      r.lang = 'vi-VN';
       r.onstart = () => setIsRecording(true);
       r.onend = () => setIsRecording(false);
+      r.onerror = () => setIsRecording(false);
       r.onresult = (e: any) => {
         const text = e.results[0][0].transcript;
         setVoiceText(text);
         setImage(null);
         setIsCurrentResultSaved(false);
       };
-      recognitionRef.current = r; r.start();
+      recognitionRef.current = r; 
+      r.start();
     }
   }, [isRecording]);
 
@@ -264,31 +299,29 @@ const App: React.FC = () => {
       let contentForTTSAndSummary = res;
 
       if (agent === AgentType.GIAI_NHANH_1S) {
-        try {
-          const parsed: Professor1Result = JSON.parse(res);
+        const parsed = parseJsonSafely<Professor1Result>(res);
+        if (parsed && parsed.finalAnswer) {
           setProfessor1Result(parsed);
           contentForTTSAndSummary = parsed.finalAnswer; 
-        } catch (parseError) {
-          console.error(`Failed to parse ${agent} JSON response:`, parseError);
+        } else {
           setAgentProcessingStates(prev => ({ ...prev, [agent]: 'error' }));
           setAllRawResults(prev => ({ ...prev, [agent]: `Lỗi phân tích kết quả từ chuyên gia ${agent}. Vui lòng thử lại.` }));
           setProfessor1Result(null);
           return;
         }
       } else if (agent === AgentType.LUYEN_SKILL) {
-        try {
-          const parsed: Professor3QuizResult = JSON.parse(res);
+        const parsed = parseJsonSafely<Professor3QuizResult>(res);
+        if (parsed && parsed.quizzes) {
           setProfessor3QuizResult(parsed);
           setUserSelectedAnswers(new Array(parsed.quizzes.length).fill(null));
           setQuizFeedback(new Array(parsed.quizzes.length).fill(null));
 
-          if (parsed.quizzes && parsed.quizzes.length > 0) {
+          if (parsed.quizzes.length > 0) {
             contentForTTSAndSummary = `Bài tập tương tự thứ nhất: ${parsed.quizzes[0].question}`;
           } else {
             contentForTTSAndSummary = `Chuyên gia ${agent} đã tạo ra các bài tập tương tự.`;
           }
-        } catch (parseError) {
-          console.error(`Failed to parse ${agent} JSON response:`, parseError);
+        } else {
           setAgentProcessingStates(prev => ({ ...prev, [agent]: 'error' }));
           setAllRawResults(prev => ({ ...prev, [agent]: `Lỗi phân tích kết quả từ chuyên gia ${agent}. Vui lòng thử lại.` }));
           setProfessor3QuizResult(null);
@@ -298,7 +331,11 @@ const App: React.FC = () => {
       
       if (contentForTTSAndSummary && contentForTTSAndSummary.trim()) {
         const summary = await generateSummary(contentForTTSAndSummary);
-        if (summary) fetchTTSAudio(summary).then(audio => { if (audio) setAllAudios(prev => ({ ...prev, [agent]: audio })); });
+        if (summary) {
+          fetchTTSAudio(summary).then(audio => { 
+            if (audio) setAllAudios(prev => ({ ...prev, [agent]: audio })); 
+          });
+        }
       }
       setAgentProcessingStates(prev => ({ ...prev, [agent]: null }));
 
@@ -333,7 +370,6 @@ const App: React.FC = () => {
         fetchAgentData(agent, selectedSubject, voiceText, image || undefined)
     );
 
-    // Đợi tất cả agent phản hồi xong mới tắt trạng thái Loading tổng
     await Promise.allSettled(agentPromises);
     
     setLoading(false);
@@ -378,12 +414,15 @@ const App: React.FC = () => {
   const handleQuizOptionSelect = useCallback((quizIndex: number, selectedOptionLetter: string, correctAnswer: string) => {
     if (userSelectedAnswers[quizIndex] !== null) return;
 
+    const normalizedCorrect = normalizeAnswerLetter(correctAnswer);
+    const normalizedSelected = normalizeAnswerLetter(selectedOptionLetter);
+
     const newSelectedAnswers = [...userSelectedAnswers];
     newSelectedAnswers[quizIndex] = selectedOptionLetter;
     setUserSelectedAnswers(newSelectedAnswers);
 
     const newQuizFeedback = [...quizFeedback];
-    newQuizFeedback[quizIndex] = (selectedOptionLetter === correctAnswer) ? 'correct' : 'incorrect';
+    newQuizFeedback[quizIndex] = (normalizedSelected === normalizedCorrect) ? 'correct' : 'incorrect';
     setQuizFeedback(newQuizFeedback);
   }, [userSelectedAnswers, quizFeedback]);
 
@@ -538,7 +577,11 @@ const App: React.FC = () => {
               </>
             ) : (
               <>
-                {[{ l: 'Camera', i: '📸', a: startCamera }, { l: 'Thư viện', i: '🖼️', a: () => fileInputRef.current?.click() }, { l: isRecording ? 'Dừng' : 'Ghi âm', i: isRecording ? '⏹️' : '🎙️', a: () => toggleRecording() }].map((it) => (
+                {[
+                  { l: 'Camera', i: '📸', a: startCamera }, 
+                  { l: 'Thư viện', i: '🖼️', a: () => fileInputRef.current?.click() }, 
+                  { l: isRecording ? 'Dừng' : 'Ghi âm', i: isRecording ? '⏹️' : '🎙️', a: () => toggleRecording() }
+                ].map((it) => (
                   <div key={it.l} className="flex flex-col items-center group">
                     <button onClick={it.a} className="w-16 h-16 rounded-3xl bg-blue-600 text-white shadow-lg active:scale-90 flex items-center justify-center hover:bg-blue-700 transition-colors" aria-label={it.l}>
                       <span className="text-2xl">{it.i}</span>
@@ -557,16 +600,21 @@ const App: React.FC = () => {
           </div>
           <canvas ref={canvasRef} className="hidden" />
           <input type="file" ref={fileInputRef} onChange={(e) => {
-            const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = (e) => {
-              const rawBase64 = e.target?.result as string;
-              compressImage(rawBase64).then((compressed) => {
-                setImage(compressed);
-                setVoiceText('');
-                setIsCurrentResultSaved(false);
-                setCapturedImagePreview(null);
-                setIsImageCaptured(false);
-              });
-            }; r.readAsDataURL(f); }
+            const f = e.target.files?.[0]; 
+            if (f) { 
+              const r = new FileReader(); 
+              r.onload = (e) => {
+                const rawBase64 = e.target?.result as string;
+                compressImage(rawBase64).then((compressed) => {
+                  setImage(compressed);
+                  setVoiceText('');
+                  setIsCurrentResultSaved(false);
+                  setCapturedImagePreview(null);
+                  setIsImageCaptured(false);
+                });
+              }; 
+              r.readAsDataURL(f); 
+            }
           }} className="hidden" accept="image/*" />
         </div>
       )}
@@ -668,8 +716,8 @@ const App: React.FC = () => {
                             <div className="grid gap-2">
                             {q.options.map((o: string, oIndex: number) => {
                                 const optionLetter = String.fromCharCode(65 + oIndex);
-                                const isSelected = userSelectedAnswers[qIndex] === optionLetter;
-                                const isCorrectAnswer = q.answer === optionLetter;
+                                const isSelected = normalizeAnswerLetter(userSelectedAnswers[qIndex] || '') === optionLetter;
+                                const isCorrectAnswer = normalizeAnswerLetter(q.answer) === optionLetter;
                                 
                                 let optionClasses = `w-full text-left px-4 py-3 rounded-xl border text-xs font-bold transition-all `;
 
@@ -767,6 +815,28 @@ const App: React.FC = () => {
                   <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                     {item.resultContent}
                   </ReactMarkdown>
+
+                  {item.professor3Quizzes && item.professor3Quizzes.quizzes && item.professor3Quizzes.quizzes.length > 0 && (
+                    <div className="mt-3 space-y-3 pt-3 border-t border-slate-200">
+                      {item.professor3Quizzes.quizzes.map((quiz, qIdx) => (
+                        <div key={qIdx} className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                          <p className="font-bold text-slate-800 mb-1">
+                            Bài {qIdx + 1}: {quiz.question}
+                          </p>
+                          <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-600 my-1">
+                            {quiz.options.map((opt, oIdx) => (
+                              <div key={oIdx}>
+                                <strong>{String.fromCharCode(65 + oIdx)}.</strong> {opt}
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-emerald-600 font-bold mt-1">
+                            Đáp án: {quiz.answer}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))
