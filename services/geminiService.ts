@@ -42,6 +42,33 @@ async function fetchServerless(payload: any, retries = 3, delay = 2000): Promise
     throw err;
   }
 }
+// 1. Hàm lọc bỏ khối Markdown ```json ... ``` do AI trả về
+export const cleanJSONResponse = (rawText: string): string => {
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
+  }
+  return cleaned;
+};
+
+// 2. Hàm đặt giới hạn thời gian chờ (Timeout) cho request
+export const fetchWithTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs = 12000 // Tối đa 12 giây cho Agent 1s
+): Promise<T> => {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Quá thời gian phản hồi (${timeoutMs / 1000}s)`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+};
 
 export const processTask = async (subject: Subject, agent: AgentType, input: string, image?: string) => {
   const isJsonResponse = agent === AgentType.GIAI_NHANH_1S || agent === AgentType.LUYEN_SKILL;
