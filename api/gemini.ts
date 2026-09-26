@@ -1,3 +1,4 @@
+// Đường dẫn file: api/gemini.ts
 import { GoogleGenAI } from "@google/genai";
 
 export interface VercelRequest {
@@ -16,25 +17,19 @@ export interface VercelResponse {
 
 const TEXT_MODEL = 'gemini-2.5-flash';
 
-/**
- * Lấy danh sách toàn bộ API Key từ các biến môi trường của Vercel
- */
 const getAllAPIKeys = (): string[] => {
   const rawKeys: string[] = [];
 
-  // Lấy từ 4 biến riêng biệt cho QUAD-CORE MAS
   if (process.env.GEMINI_API_KEY_1) rawKeys.push(process.env.GEMINI_API_KEY_1);
   if (process.env.GEMINI_API_KEY_2) rawKeys.push(process.env.GEMINI_API_KEY_2);
   if (process.env.GEMINI_API_KEY_3) rawKeys.push(process.env.GEMINI_API_KEY_3);
   if (process.env.GEMINI_API_KEY_4) rawKeys.push(process.env.GEMINI_API_KEY_4);
 
-  // Lấy từ biến gộp GEMINI_API_KEY (nếu dán dạng key1,key2,key3,key4)
   const envKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
   if (envKey) {
     rawKeys.push(...envKey.split(','));
   }
 
-  // Tách chuỗi, xóa khoảng trắng và loại bỏ các Key trùng lặp
   const cleanKeys = rawKeys
     .map(k => k ? k.trim() : '')
     .filter(k => k.length > 0 && k.startsWith("AIzaSy"));
@@ -42,26 +37,21 @@ const getAllAPIKeys = (): string[] => {
   return Array.from(new Set(cleanKeys));
 };
 
-/**
- * Sắp xếp thứ tự ưu tiên Key dựa trên Tác tử (Agent), sau đó xoay vòng dự phòng
- */
 const getOrderedKeysForAgent = (agent?: string): string[] => {
   const allKeys = getAllAPIKeys();
   if (allKeys.length === 0) return [];
 
-  // Xác định Key ưu tiên hàng đầu dựa trên Tác tử
   let primaryKeyIndex = 0;
   if (agent === 'Điều phối MAS' || agent === 'ORCHESTRATOR') {
-    primaryKeyIndex = 0; // Key 1
+    primaryKeyIndex = 0;
   } else if (agent === 'Giải nhanh 1S' || agent === 'GIAI_NHANH_1S') {
-    primaryKeyIndex = 1; // Key 2
+    primaryKeyIndex = 1;
   } else if (agent === 'Gia sư AI' || agent === 'GIA_SU_AI') {
-    primaryKeyIndex = 2; // Key 3
+    primaryKeyIndex = 2;
   } else if (agent === 'Luyện Skill' || agent === 'LUYEN_SKILL') {
-    primaryKeyIndex = 3; // Key 4
+    primaryKeyIndex = 3;
   }
 
-  // Đưa Key ưu tiên lên đầu, các Key còn lại xếp phía sau để làm dự phòng
   const ordered: string[] = [];
   if (allKeys[primaryKeyIndex]) {
     ordered.push(allKeys[primaryKeyIndex]);
@@ -76,9 +66,6 @@ const getOrderedKeysForAgent = (agent?: string): string[] => {
   return ordered;
 };
 
-/**
- * Thử thực thi thao tác với Key ưu tiên, tự động luân chuyển sang Key dự phòng khi gặp lỗi
- */
 async function executeWithKeyRotation(agent: string | undefined, operation: (ai: GoogleGenAI) => Promise<any>): Promise<any> {
   const keys = getOrderedKeysForAgent(agent);
   
@@ -110,7 +97,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { action, subject, agent, input, image, text, systemPrompt, responseFormat } = req.body || {};
 
   try {
-    // 1. Xử lý yêu cầu tóm tắt (SUMMARY)
     if (action === 'SUMMARY') {
       const summaryText = await executeWithKeyRotation('SUMMARY', async (ai) => {
         const response = await ai.models.generateContent({
@@ -122,7 +108,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ text: summaryText });
     }
 
-    // 2. Xử lý tác tử chính (PROCESS_TASK)
     const safeSubject = subject || '';
     const safeAgent = agent || '';
     const safeSystemPrompt = systemPrompt || '';
@@ -132,7 +117,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const parts: any[] = [{ text: promptContent }];
     
-    // Đính kèm hình ảnh nếu có (Base64)
     if (image) {
       const base64Data = image.includes(',') ? image.split(',')[1] : image;
       parts.unshift({
@@ -149,7 +133,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         topP: 0.8 
       };
 
-      // Nếu yêu cầu định dạng JSON (Cho Giải nhanh 1S hoặc Luyện Skill)
       if (responseFormat === 'json') {
         generationConfig.responseMimeType = "application/json";
       }
