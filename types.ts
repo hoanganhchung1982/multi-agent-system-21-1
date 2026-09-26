@@ -6,9 +6,10 @@ export enum Subject {
 }
 
 export enum AgentType {
-  GIAI_NHANH_1S = 'Giải nhanh 1S', // Trả đáp án kết quả ngắn gọn
-  GIA_SU_AI = 'Gia sư AI',         // Trả lời giải chi tiết Socratic
-  LUYEN_SKILL = 'Luyện Skill',     // Trả 2 bài tập tương tự + lời giải gọn
+  ORCHESTRATOR = 'Điều phối MAS',  // Tác tử Nhân 1: Bóc tách, chuẩn hóa đề
+  GIAI_NHANH_1S = 'Giải nhanh 1S', // Tác tử Nhân 2: Trả đáp án kết quả ngắn gọn
+  GIA_SU_AI = 'Gia sư AI',         // Tác tử Nhân 3: Trả lời giải chi tiết Socratic
+  LUYEN_SKILL = 'Luyện Skill',     // Tác tử Nhân 4: Trả 2 bài tập tương tự + lời giải gọn
 }
 
 export interface QuizQuestion {
@@ -33,7 +34,6 @@ export interface AnalysisResult {
 
 export type InputMode = 'CAMERA' | 'GALLERY' | 'VOICE';
 
-// Kiểu dữ liệu cho Màn hình Ghi danh học sinh
 export interface UserProfile {
   fullName: string;
   className: string;
@@ -41,7 +41,6 @@ export interface UserProfile {
   province: string;
 }
 
-// Kiểu dữ liệu cho Nhật ký học tập cá nhân hóa tại máy
 export interface DiaryEntry {
   date: string;
   subject: Subject;
