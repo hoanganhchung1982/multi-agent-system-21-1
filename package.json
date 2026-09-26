@@ -16,6 +16,7 @@
     "react-markdown": "^10.1.0",
     "rehype-katex": "^7.0.0",
     "remark-math": "^6.0.0",
+    "tesseract.js": "^5.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
