@@ -1,9 +1,7 @@
 {
-  "version": 2,
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+  "functions": {
+    "api/gemini.ts": {
+      "maxDuration": 15
     }
-  ]
+  }
 }
