@@ -7,9 +7,17 @@ export default defineConfig(({ mode }) => {
   // Nạp toàn bộ biến môi trường từ file .env.local
   const env = loadEnv(mode, process.cwd(), '');
 
-  // Đảm bảo gán API Key trực tiếp vào process.env của Node.js Server
-  const apiKey = env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || '';
-  process.env.GEMINI_API_KEY = apiKey;
+  // Cấu hình nạp 4 API Keys cho hệ thống QUAD-CORE MAS
+  const k1 = env.GEMINI_API_KEY_1 || env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || '';
+  const k2 = env.GEMINI_API_KEY_2 || '';
+  const k3 = env.GEMINI_API_KEY_3 || '';
+  const k4 = env.GEMINI_API_KEY_4 || '';
+
+  // Gán trực tiếp vào process.env của Node.js Server môi trường Dev
+  process.env.GEMINI_API_KEY_1 = k1;
+  process.env.GEMINI_API_KEY_2 = k2;
+  process.env.GEMINI_API_KEY_3 = k3;
+  process.env.GEMINI_API_KEY_4 = k4;
 
   return {
     server: {
@@ -21,9 +29,8 @@ export default defineConfig(({ mode }) => {
       {
         name: 'gemini-api-dev-server',
         configureServer(server) {
-          // Bắt các request gửi đến /api/gemini
+          // Bắt các request gửi đến /api/gemini ở môi trường dev local
           server.middlewares.use((req, res, next) => {
-            // Kiểm tra đúng endpoint /api/gemini
             if (req.url?.startsWith('/api/gemini')) {
               if (req.method !== 'POST') {
                 res.statusCode = 405;
@@ -38,8 +45,11 @@ export default defineConfig(({ mode }) => {
                 try {
                   const parsedBody = body ? JSON.parse(body) : {};
                   
-                  // Đảm bảo cập nhật lại process.env trước khi gọi handler
-                  process.env.GEMINI_API_KEY = apiKey;
+                  // Đảm bảo duy trì 4 Keys trong process.env trước khi gọi Handler
+                  process.env.GEMINI_API_KEY_1 = k1;
+                  process.env.GEMINI_API_KEY_2 = k2;
+                  process.env.GEMINI_API_KEY_3 = k3;
+                  process.env.GEMINI_API_KEY_4 = k4;
 
                   const vercelReq: any = {
                     method: req.method,
@@ -81,8 +91,10 @@ export default defineConfig(({ mode }) => {
       }
     ],
     define: {
-      'process.env.API_KEY': JSON.stringify(apiKey),
-      'process.env.GEMINI_API_KEY': JSON.stringify(apiKey)
+      'process.env.GEMINI_API_KEY_1': JSON.stringify(k1),
+      'process.env.GEMINI_API_KEY_2': JSON.stringify(k2),
+      'process.env.GEMINI_API_KEY_3': JSON.stringify(k3),
+      'process.env.GEMINI_API_KEY_4': JSON.stringify(k4),
     },
     resolve: {
       alias: {
